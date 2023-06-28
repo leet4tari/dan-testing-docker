@@ -4,7 +4,7 @@
 ARG RUST_VERSION=1.70
 
 # rust source compile with cross platform build support
-FROM --platform=$BUILDPLATFORM rust:$RUST_VERSION-bullseye as builder
+FROM --platform=$BUILDPLATFORM rust:$RUST_VERSION-bullseye as builder-tari
 
 # Declare to make available
 ARG BUILDPLATFORM
@@ -18,9 +18,6 @@ ARG TARGETVARIANT
 ARG RUST_TOOLCHAIN
 ARG RUST_TARGET
 ARG RUST_VERSION
-
-ARG TARI_DEBUG
-ARG DAN_DEBUG
 
 # Prep nodejs 18.x
 RUN apt-get update && apt-get install -y \
@@ -67,30 +64,20 @@ RUN if [ "${BUILDARCH}" != "${TARGETARCH}" ] && [ "${ARCH}" = "native" ] ; then 
 WORKDIR /tari
 
 ADD tari .
+ADD cross-compile-aarch64.sh .
 
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
       # Hardcoded ARM64 envs for cross-compiling - FixMe soon
-      export BUILD_TARGET="aarch64-unknown-linux-gnu/" && \
-      export RUST_TARGET="--target=aarch64-unknown-linux-gnu" && \
-      export ARCH=generic && \
-      export FEATURES=safe && \
-      export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc && \
-      export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc && \
-      export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++ && \
-      export BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/aarch64-linux-gnu/include/" && \
-      export RUSTFLAGS="-C target_cpu=$ARCH" && \
-      export ROARING_ARCH=$ARCH && \
-      rustup target add aarch64-unknown-linux-gnu && \
-      rustup toolchain install stable-aarch64-unknown-linux-gnu --force-non-host ; \
+      source /tari/cross-compile-aarch64.sh ; \
     fi && \
     if [ -n "${RUST_TOOLCHAIN}" ] ; then \
       # Install a non-standard toolchain if it has been requested.
       # By default we use the toolchain specified in rust-toolchain.toml
       rustup toolchain install ${RUST_TOOLCHAIN} --force-non-host ; \
     fi && \
-    if [ "${TARI_DEBUG}" != "true" ] ; then \
     rustup target list --installed && \
     rustup toolchain list && \
+    rustup show && \
     cargo build ${RUST_TARGET} \
       --release --features ${FEATURES} --locked \
       --bin tari_base_node \
@@ -100,8 +87,6 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; 
     cp -v /tari/target/${BUILD_TARGET}release/tari_base_node /usr/local/bin/ && \
     cp -v /tari/target/${BUILD_TARGET}release/tari_console_wallet /usr/local/bin/ && \
     cp -v /tari/target/${BUILD_TARGET}release/tari_miner /usr/local/bin/ && \
-      echo "tari debug" ; \
-    fi && \
     echo "Tari Build Done"
 
 RUN mkdir -p "/usr/local/lib/tari/protos/" && \
@@ -110,30 +95,78 @@ RUN mkdir -p "/usr/local/lib/tari/protos/" && \
       --python_out=/usr/local/lib/tari/protos \
       --grpc_python_out=/usr/local/lib/tari/protos /tari/applications/tari_app_grpc/proto/*.proto
 
+# rust source compile with cross platform build support
+FROM --platform=$BUILDPLATFORM rust:$RUST_VERSION-bullseye as builder-tari-dan
+
+# Declare to make available
+ARG BUILDPLATFORM
+ARG BUILDOS
+ARG BUILDARCH
+ARG BUILDVARIANT
+ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG RUST_TOOLCHAIN
+ARG RUST_TARGET
+ARG RUST_VERSION
+
+# Prep nodejs 18.x
+RUN apt-get update && apt-get install -y \
+      apt-transport-https \
+      bash \
+      ca-certificates \
+      curl \
+      gpg && \
+      curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+
+RUN apt-get update && apt-get install -y \
+      apt-transport-https \
+      bash \
+      ca-certificates \
+      curl \
+      gpg \
+      iputils-ping \
+      less \
+      libreadline-dev \
+      libsqlite3-0 \
+      openssl \
+      telnet \
+      cargo \
+      clang \
+      gcc-aarch64-linux-gnu \
+      g++-aarch64-linux-gnu \
+      cmake \
+      nodejs \
+      python3-grpc-tools
+
+ARG ARCH=native
+#ARG FEATURES=avx2
+ENV RUSTFLAGS="-C target_cpu=$ARCH"
+ENV ROARING_ARCH=$ARCH
+ENV CARGO_HTTP_MULTIPLEXING=false
+
+ARG VERSION=1.0.1
+
+RUN if [ "${BUILDARCH}" != "${TARGETARCH}" ] && [ "${ARCH}" = "native" ] ; then \
+      echo "!! Cross-compile and native ARCH not a good idea !! " ; \
+    fi
+
 WORKDIR /tari-dan
 
 ADD tari-dan .
+ADD cross-compile-aarch64.sh .
 
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
       # Hardcoded ARM64 envs for cross-compiling - FixMe soon
-      export BUILD_TARGET="aarch64-unknown-linux-gnu/" && \
-      export RUST_TARGET="--target=aarch64-unknown-linux-gnu" && \
-      export ARCH=generic && \
-      export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc && \
-      export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc && \
-      export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++ && \
-      export BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/aarch64-linux-gnu/include/" && \
-      export RUSTFLAGS="-C target_cpu=$ARCH" && \
-      export ROARING_ARCH=$ARCH && \
-      rustup target add aarch64-unknown-linux-gnu && \
-      rustup toolchain install stable-aarch64-unknown-linux-gnu --force-non-host ; \
+      # Hardcoded ARM64 envs for cross-compiling - FixMe soon
+      source /tari-dan/cross-compile-aarch64.sh ; \
     fi && \
     if [ -n "${RUST_TOOLCHAIN}" ] ; then \
       # Install a non-standard toolchain if it has been requested.
       # By default we use the toolchain specified in rust-toolchain.toml
       rustup toolchain install ${RUST_TOOLCHAIN} --force-non-host ; \
     fi && \
-    if [ "${DAN_DEBUG}" != "true" ] ; then \
     cd /tari-dan/applications/tari_indexer_web_ui && \
     npm install react-scripts && \
     npm run build && \
@@ -163,9 +196,7 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; 
     cp -v /tari-dan/target/${BUILD_TARGET}release/tari_signaling_server /usr/local/bin/ && \
     cp -v /tari-dan/target/${BUILD_TARGET}release/tari_validator_node /usr/local/bin/ && \
     cp -v /tari-dan/target/${BUILD_TARGET}release/tari_validator_node_cli /usr/local/bin/ && \
-      echo "dan debug" ; \
-    fi && \
-    echo "tari-dan Build Done"
+    echo "Tari Dan Build Done"
 
 # Create runtime base minimal image for the target platform executables
 FROM --platform=$BUILDPLATFORM rust:$RUST_VERSION-bullseye as runtime
@@ -250,8 +281,9 @@ RUN npm link
 WORKDIR /home/tari/sources/dan-testing
 RUN npm link tari-connector
 
-COPY --from=builder /usr/local/bin/tari_* /usr/local/bin/
-COPY --chown=tari:tari --from=builder /usr/local/lib/tari/protos /home/tari/sources/dan-testing/protos
+COPY --chown=tari:tari --from=builder-tari /usr/local/lib/tari/protos /home/tari/sources/dan-testing/protos
+COPY --from=builder-tari /usr/local/bin/tari_* /usr/local/bin/
+COPY --from=builder-tari-dan /usr/local/bin/tari_* /usr/local/bin/
 
 ENV DAN_TESTING_USE_BINARY_EXECUTABLE=True
 ENV TARI_BINS_FOLDER=/usr/local/bin/

@@ -171,8 +171,9 @@ commandEnv=$(echo "${1}" | tr "[:upper:]" "[:lower:]")
 
 case $commandEnv in
   -s | suite )
-    build_tari_image tari_testing \
-      "$TL_VERSION_LONG" ${TARI_SOURCE_ROOT}
+    shift
+    build_tari_image dan-testing \
+      "$TL_VERSION_LONG" ${TARI_SOURCE_ROOT} $*
     ;;
   -t | tari )
     build_all_tari_images
