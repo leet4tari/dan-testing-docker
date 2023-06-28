@@ -22,13 +22,6 @@ ARG RUST_VERSION
 ARG TARI_DEBUG
 ARG DAN_DEBUG
 
-# Disable anti-cache
-#RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
-# https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md#run---mounttypecache
-#RUN --mount=type=cache,id=build-apt-cache-${BUILDOS}-${BUILDARCH}${BUILDVARIANT},sharing=locked,target=/var/cache/apt \
-#    --mount=type=cache,id=build-apt-lib-${BUILDOS}-${BUILDARCH}${BUILDVARIANT},sharing=locked,target=/var/lib/apt \
-#  apt-get update && apt-get install -y \
-
 # Prep nodejs 18.x
 RUN apt-get update && apt-get install -y \
       apt-transport-https \
@@ -75,12 +68,6 @@ WORKDIR /tari
 
 ADD tari .
 
-#RUN --mount=type=cache,id=rust-git-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/home/rust/.cargo/git \
-#    --mount=type=cache,id=rust-home-registry-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/home/rust/.cargo/registry \
-#    --mount=type=cache,id=rust-local-registry-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/usr/local/cargo/registry \
-#    --mount=type=cache,id=rust-src-target-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/home/rust/src/target \
-#    --mount=type=cache,id=rust-target-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/tari/target \
-#    if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
       # Hardcoded ARM64 envs for cross-compiling - FixMe soon
       export BUILD_TARGET="aarch64-unknown-linux-gnu/" && \
@@ -127,12 +114,6 @@ WORKDIR /tari-dan
 
 ADD tari-dan .
 
-#RUN --mount=type=cache,id=rust-git-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/home/rust/.cargo/git \
-#    --mount=type=cache,id=rust-home-registry-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/home/rust/.cargo/registry \
-#    --mount=type=cache,id=rust-local-registry-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/usr/local/cargo/registry \
-#    --mount=type=cache,id=rust-src-target-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/home/rust/src/target \
-#    --mount=type=cache,id=rust-target-${TARGETOS}-${TARGETARCH}${TARGETVARIANT},sharing=locked,target=/tari/target \
-#    if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
       # Hardcoded ARM64 envs for cross-compiling - FixMe soon
       export BUILD_TARGET="aarch64-unknown-linux-gnu/" && \
@@ -187,7 +168,6 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; 
     echo "tari-dan Build Done"
 
 # Create runtime base minimal image for the target platform executables
-#FROM --platform=$TARGETPLATFORM bitnami/minideb:bullseye as runtime
 FROM --platform=$BUILDPLATFORM rust:$RUST_VERSION-bullseye as runtime
 
 ARG BUILDPLATFORM
@@ -203,30 +183,30 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Prep nodejs 18.x
 RUN apt-get update && apt-get install -y \
-  apt-transport-https \
-  bash \
-  ca-certificates \
-  curl \
-  gpg && \
-  curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+      apt-transport-https \
+      bash \
+      ca-certificates \
+      curl \
+      gpg && \
+      curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
 
 RUN apt-get update && apt-get --no-install-recommends install -y \
-  apt-transport-https \
-  bash \
-  ca-certificates \
-  curl \
-  gpg \
-  iputils-ping \
-  less \
-  libreadline8 \
-  libreadline-dev \
-  libsqlite3-0 \
-  openssl \
-  telnet \
-  nodejs \
-  python3-requests \
-  python3-grpc-tools \
-  python3-psutil
+      apt-transport-https \
+      bash \
+      ca-certificates \
+      curl \
+      gpg \
+      iputils-ping \
+      less \
+      libreadline8 \
+      libreadline-dev \
+      libsqlite3-0 \
+      openssl \
+      telnet \
+      nodejs \
+      python3-requests \
+      python3-grpc-tools \
+      python3-psutil
 
 RUN groupadd --gid 1000 tari && \
     useradd --create-home --no-log-init --shell /bin/bash \
@@ -248,15 +228,21 @@ RUN mkdir -p "/home/tari/sources/tari-connector" && \
     chown -R tari:tari "/usr/local/lib/node_modules"
 
 USER tari
-
 WORKDIR /home/tari
-RUN cargo install cargo-generate
+RUN rustup toolchain install nightly --force-non-host && \
+    rustup target add wasm32-unknown-unknown && \
+    rustup target add wasm32-unknown-unknown --toolchain nightly && \
+    rustup default nightly-2022-11-03 && \
+    rustup target list --installed && \
+    rustup toolchain list && \
+    rustup show && \
+    cargo install cargo-generate
 
 WORKDIR /home/tari/sources
-#ADD tari tari
-#ADD tari-dan tari-dan
-ADD tari-connector tari-connector
-ADD dan-testing dan-testing
+#ADD --chown=tari:tari tari tari
+#ADD --chown=tari:tari tari-dan tari-dan
+ADD --chown=tari:tari tari-connector tari-connector
+ADD --chown=tari:tari dan-testing dan-testing
 
 WORKDIR /home/tari/sources/tari-connector
 RUN npm link
@@ -265,8 +251,7 @@ WORKDIR /home/tari/sources/dan-testing
 RUN npm link tari-connector
 
 COPY --from=builder /usr/local/bin/tari_* /usr/local/bin/
-#COPY --from=builder /usr/local/lib/tari/protos /usr/local/lib/tari/protos
-COPY --from=builder /usr/local/lib/tari/protos /home/tari/sources/dan-testing/protos
+COPY --chown=tari:tari --from=builder /usr/local/lib/tari/protos /home/tari/sources/dan-testing/protos
 
 ENV DAN_TESTING_USE_BINARY_EXECUTABLE=True
 ENV TARI_BINS_FOLDER=/usr/local/bin/
