@@ -10,40 +10,6 @@
 #set -e
 set -x
 
-build_3dparty_image() {
-# $1 dockerfile
-# $2 image name
-# $3 build from path
-# $4 subtag - if not set, extracted from dockerfile ie: TOR_VERSION
-
-  if [ -f "docker_rig/$1" ]; then
-    if [ -z "$4" ]; then
-      SUBTAG=$(awk -v search="^ARG ${2^^}?_VERSION=" -F '=' '$0 ~ search \
-        { gsub(/["]/, "", $2); printf("%s",$2) }' \
-        "docker_rig/$1")
-    else
-      SUBTAG=$4
-    fi
-  else
-    echo "No docker file docker_rig/$1"
-    exit 1
-  fi
-
-  echo "Building from $1 in $2 image version ${SUBTAG}${SUBTAG_EXTRA} ..."
-
-  # Add docker tag alias - ie: latest
-  if [ ! -z "${TL_TAG_ALIAS}" ]; then
-    TL_TAG_CMD=" -t ${TL_TAG_URL}/$2:${TL_TAG_ALIAS} "
-  fi
-
-  docker ${TL_TAG_BUILD_OPTS} \
-    -f docker_rig/$1 \
-    --build-arg VERSION="${TL_VERSION}" \
-    --build-arg ${2^^}_VERSION=${SUBTAG} \
-    $4 $5 $6 $7 $8 $9 \
-    -t ${TL_TAG_URL}/$2:${SUBTAG}${SUBTAG_EXTRA} $3 ${TL_TAG_BUILD_Extra} ${TL_TAG_CMD}
-}
-
 build_tari_image() {
 # $1 image name
 # $2 image tag
@@ -72,17 +38,12 @@ build_tari_image() {
     --build-arg VERSION=$2 \
     $4 $5 $6 $7 $8 $9 \
     -t ${TL_TAG_URL}/$1:$2 $3 ${TL_TAG_BUILD_Extra} ${TL_TAG_CMD}
-}
 
-build_3dparty_image_json() {
-# $1 json image_name
-  build_3dparty_image $1.Dockerfile $1 .
-}
-
-build_all_3dparty_images() {
-  for element in "${arr3rdParty[@]}"; do
-    build_3dparty_image_json $element
-  done
+  if [ "$?" -eq 0 ]; then
+    echo "Docker image build - ${TL_TAG_URL}/$1:$2"
+  else
+    echo "Something went wrong build docker ${TL_TAG_URL}/$1:$2"
+  fi
 }
 
 build_tari_image_json() {
@@ -213,9 +174,6 @@ case $commandEnv in
     build_tari_image tari_testing \
       "$TL_VERSION_LONG" ${TARI_SOURCE_ROOT}
     ;;
-  -3 | 3rdparty )
-    build_all_3dparty_images
-    ;;
   -t | tari )
     build_all_tari_images
     ;;
@@ -229,8 +187,6 @@ case $commandEnv in
       echo "Image found - $1"
       if [ "${1:0:5}" == "tari_" ]; then
         build_tari_image_json $1
-      else
-        build_3dparty_image_json $1
       fi
     else
       echo "Image not found for $1"

@@ -269,6 +269,9 @@ COPY --from=builder /usr/local/bin/tari_* /usr/local/bin/
 COPY --from=builder /usr/local/lib/tari/protos /home/tari/sources/dan-testing/protos
 
 ENV DAN_TESTING_USE_BINARY_EXECUTABLE=True
+ENV TARI_BINS_FOLDER=/usr/local/bin/
+ENV TARI_DAN_BINS_FOLDER=/usr/local/bin/
+ENV USER=tari
 WORKDIR /home/tari/sources/dan-testing
 #ENTRYPOINT [ "tari_base_node" ]
 #CMD [ "--non-interactive-mode" ]
